@@ -1,4 +1,6 @@
 streamlit
 PyPDF2
-google.generativeai
+google-generativeai
 python-dotenv
+pymongo
+flask-pymongo

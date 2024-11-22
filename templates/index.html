@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart ATS</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .keyword-item {
+            display: inline-block;
+            padding: 6px 12px;
+            margin: 4px;
+            border-radius: 16px;
+            background-color: #e2e8f0;
+            color: #2d3748;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center mb-8 text-blue-600">Smart ATS</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Input Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <form id="analysisForm" class="space-y-6">
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="jd">
+                            Job Description
+                        </label>
+                        <textarea id="jd" name="jd" rows="10" 
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Paste the job description here..."></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-gray-700 text-sm font-bold mb-2" for="resume">
+                            Resume (PDF)
+                        </label>
+                        <input type="file" id="resume" name="resume" accept=".pdf"
+                            class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                    
+                    <button type="submit" 
+                        class="w-full bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        Analyze Resume
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Results Section -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div id="loader" class="hidden flex justify-center items-center h-full">
+                    <div class="loader"></div>
+                </div>
+                
+                <div id="results" class="hidden space-y-6">
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <h2 class="text-2xl font-bold text-center text-blue-600" id="matchScore"></h2>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-bold mb-4">Required Keywords</h3>
+                        <div id="keywords" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('analysisForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const form = new FormData();
+            form.append('jd', document.getElementById('jd').value);
+            form.append('resume', document.getElementById('resume').files[0]);
+            
+            // Show loader, hide results
+            document.getElementById('loader').classList.remove('hidden');
+            document.getElementById('results').classList.add('hidden');
+            
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: form
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Update match score
+                    document.getElementById('matchScore').textContent = `Match Score: ${data['JD Match']}`;
+                    
+                    // Display keywords
+                    const keywordsDiv = document.getElementById('keywords');
+                    keywordsDiv.innerHTML = '';
+                    
+                    if (data['JD Keywords'] && Array.isArray(data['JD Keywords'])) {
+                        data['JD Keywords'].forEach(keyword => {
+                            const keywordElement = document.createElement('div');
+                            keywordElement.className = 'keyword-item';
+                            keywordElement.textContent = keyword;
+                            keywordsDiv.appendChild(keywordElement);
+                        });
+                    }
+                    
+                    // Show results, hide loader
+                    document.getElementById('results').classList.remove('hidden');
+                } else {
+                    alert(data.error || 'An error occurred');
+                }
+            } catch (error) {
+                alert('An error occurred while analyzing the resume');
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>

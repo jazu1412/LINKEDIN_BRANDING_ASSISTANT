@@ -1,0 +1,136 @@
+openapi: 3.0.0
+info:
+  title: Smart ATS API
+  description: API for resume analysis and job description matching
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:5000
+    description: Development server
+
+paths:
+  /api/resume:
+    post:
+      summary: Upload and store a resume
+      operationId: uploadResume
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                resume:
+                  type: string
+                  format: binary
+                  description: PDF resume file
+      responses:
+        '200':
+          description: Resume successfully uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resume_id:
+                    type: string
+                    description: MongoDB ObjectId of the stored resume
+                  message:
+                    type: string
+                    example: "Resume uploaded successfully"
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "No resume file uploaded"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to store resume"
+
+  /api/analyze:
+    post:
+      summary: Analyze job description against stored resume
+      operationId: analyzeJobDescription
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resume_id:
+                  type: string
+                  description: MongoDB ObjectId of the stored resume
+                job_description:
+                  type: string
+                  description: Job description text to analyze
+              required:
+                - resume_id
+                - job_description
+      responses:
+        '200':
+          description: Analysis results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  JD Match:
+                    type: string
+                    example: "70%"
+                  JD Keywords:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Java", "Python", "Machine Learning"]
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Missing resume_id or job_description"
+        '404':
+          description: Resume not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Resume not found"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Analysis failed"
+
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
