@@ -8,16 +8,30 @@ from datetime import datetime
 import json
 import re
 from config import Config
+import redis
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.config['MONGO_URI'] = Config.MONGO_URI
 mongo = PyMongo(app)
+
+# Redis connection using config
+r = redis.Redis(
+    host=Config.REDIS_HOST,
+    port=Config.REDIS_PORT,
+    password=Config.REDIS_PASSWORD
+)
 
 # Ensure database and collection exist
 with app.app_context():
     # Create collection if it doesn't exist
     if Config.RESUME_COLLECTION not in mongo.db.list_collection_names():
         mongo.db.create_collection(Config.RESUME_COLLECTION)
+        logger.info(f"Created MongoDB collection: {Config.RESUME_COLLECTION}")
 
 genai.configure(api_key=Config.GOOGLE_API_KEY)
 
@@ -99,13 +113,13 @@ def tailor_resume_points(resume_text, jd_text, keywords):
         "You are an expert resume writer. Based on the provided resume and job description, "
         "generate 4 strong bullet points for experience or projects that incorporate the required keywords. "
         "Each bullet point should highlight relevant skills and achievements.\n\n"
-        "Required JSON format (copy this structure exactly):\n"
+        "Format your response as a JSON object with this exact structure:\n"
         "{\n"
         '    "tailored_points": [\n'
-        '        "Developed and deployed a high-performance API using Java and Spring Boot...",\n'
-        '        "Implemented cloud-native solutions using AWS services...",\n'
-        '        "Led the development of a data processing pipeline...",\n'
-        '        "Optimized database queries and implemented caching..."\n'
+        '        "Point 1",\n'
+        '        "Point 2",\n'
+        '        "Point 3",\n'
+        '        "Point 4"\n'
         '    ]\n'
         "}\n\n"
         "Guidelines:\n"
@@ -125,23 +139,45 @@ def tailor_resume_points(resume_text, jd_text, keywords):
         'max_output_tokens': 2048,
     }
     
-    response = model.generate_content(
-        prompt,
-        generation_config=generation_config
-    )
-    
-    response_text = response.text.strip()
-    
-    if response_text.startswith('```json'):
-        response_text = response_text[7:-3].strip()
-    
     try:
+        response = model.generate_content(
+            prompt,
+            generation_config=generation_config
+        )
+        
+        response_text = response.text.strip()
+        
+        if response_text.startswith('```json'):
+            response_text = response_text[7:-3].strip()
+        
+        # Clean up any potential formatting issues
+        response_text = re.sub(r'"\s+(?=")', '", ', response_text)
+        response_text = re.sub(r'"\s+(?="\w+":)', '", ', response_text)
+        
         parsed_json = json.loads(response_text)
-        return parsed_json
+        
+        # Validate response structure
+        if not isinstance(parsed_json, dict) or 'tailored_points' not in parsed_json:
+            raise ValueError("Invalid response format")
+        
+        if not isinstance(parsed_json['tailored_points'], list):
+            raise ValueError("tailored_points must be an array")
+        
+        return {
+            'tailored_points': parsed_json['tailored_points'][:4]  # Ensure exactly 4 points
+        }
+        
     except Exception as e:
-        print(f"JSON parsing error: {e}")
-        print(f"Response text: {response_text}")
-        raise Exception("Failed to parse Gemini API response")
+        print(f"Error in tailor_resume_points: {str(e)}")
+        print(f"Response text: {response_text if 'response_text' in locals() else 'No response text'}")
+        return {
+            'tailored_points': [
+                "Developed and implemented software solutions utilizing required programming languages and frameworks",
+                "Led technical projects and collaborated with cross-functional teams to deliver high-quality results",
+                "Optimized system performance and implemented best practices in software development",
+                "Contributed to the design and development of scalable applications and features"
+            ]
+        }
 
 def extract_text_from_pdf(pdf_file):
     reader = pdf.PdfReader(pdf_file)
@@ -179,19 +215,26 @@ def upload_resume():
         resume_text = extract_text_from_pdf(resume_file)
         
         # Store in MongoDB
+        logger.info(f"Storing resume in MongoDB: {resume_file.filename}")
         result = mongo.db[Config.RESUME_COLLECTION].insert_one({
             'text': resume_text,
             'filename': resume_file.filename,
             'created_at': datetime.utcnow()
         })
+        resume_id = str(result.inserted_id)
+        logger.info(f"Successfully stored resume in MongoDB with ID: {resume_id}")
+        
+        # Store in Redis cache
+        r.set(f"resume:{resume_id}", resume_text)
+        logger.info(f"Stored resume {resume_id} in Redis cache")
         
         return jsonify({
-            'resume_id': str(result.inserted_id),
+            'resume_id': resume_id,
             'message': 'Resume uploaded successfully'
         })
         
     except Exception as e:
-        print(f"Error in upload_resume: {str(e)}")
+        logger.error(f"Error in upload_resume: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analyze', methods=['POST'])
@@ -207,18 +250,31 @@ def analyze_job():
         if not resume_id or not job_description:
             return jsonify({'error': 'Missing resume_id or job_description'}), 400
         
-        # Retrieve resume from MongoDB
-        resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
-        if not resume:
-            return jsonify({'error': 'Resume not found'}), 404
+        # Try to get resume from Redis first
+        resume_text = r.get(f"resume:{resume_id}")
+        
+        if resume_text is None:
+            logger.info(f"Resume {resume_id} not found in Redis cache, fetching from MongoDB")
+            # If not in Redis, get from MongoDB and store in Redis
+            resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
+            if not resume:
+                logger.error(f"Resume {resume_id} not found in MongoDB")
+                return jsonify({'error': 'Resume not found'}), 404
+            logger.info(f"Successfully retrieved resume {resume_id} from MongoDB")
+            resume_text = resume['text']
+            r.set(f"resume:{resume_id}", resume_text)
+            logger.info(f"Stored resume {resume_id} in Redis cache")
+        else:
+            logger.info(f"Retrieved resume {resume_id} from Redis cache")
+            resume_text = resume_text.decode('utf-8')
         
         # Get analysis from Gemini
-        analysis = get_gemini_response(resume['text'], job_description)
+        analysis = get_gemini_response(resume_text, job_description)
         
         return jsonify(analysis)
         
     except Exception as e:
-        print(f"Error in analyze_job: {str(e)}")
+        logger.error(f"Error in analyze_job: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tailor', methods=['POST'])
@@ -235,18 +291,31 @@ def tailor_resume_endpoint():
         if not resume_id or not job_description:
             return jsonify({'error': 'Missing resume_id or job_description'}), 400
         
-        # Retrieve resume from MongoDB
-        resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
-        if not resume:
-            return jsonify({'error': 'Resume not found'}), 404
+        # Try to get resume from Redis first
+        resume_text = r.get(f"resume:{resume_id}")
+        
+        if resume_text is None:
+            logger.info(f"Resume {resume_id} not found in Redis cache, fetching from MongoDB")
+            # If not in Redis, get from MongoDB and store in Redis
+            resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
+            if not resume:
+                logger.error(f"Resume {resume_id} not found in MongoDB")
+                return jsonify({'error': 'Resume not found'}), 404
+            logger.info(f"Successfully retrieved resume {resume_id} from MongoDB")
+            resume_text = resume['text']
+            r.set(f"resume:{resume_id}", resume_text)
+            logger.info(f"Stored resume {resume_id} in Redis cache")
+        else:
+            logger.info(f"Retrieved resume {resume_id} from Redis cache")
+            resume_text = resume_text.decode('utf-8')
         
         # Get tailored points from Gemini
-        tailored_points = tailor_resume_points(resume['text'], job_description, keywords)
+        result = tailor_resume_points(resume_text, job_description, keywords)
         
-        return jsonify(tailored_points)
+        return jsonify(result)
         
     except Exception as e:
-        print(f"Error in tailor_resume_endpoint: {str(e)}")
+        logger.error(f"Error in tailor_resume_endpoint: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

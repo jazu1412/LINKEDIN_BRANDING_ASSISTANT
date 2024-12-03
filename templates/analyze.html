@@ -47,6 +47,10 @@
             color: #2563eb;
             font-weight: bold;
         }
+        .button-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -73,8 +77,8 @@
                             class="flex-1 bg-blue-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
                             Analyze Job Description
                         </button>
-                        <button type="button" id="tailorButton"
-                            class="flex-1 bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500">
+                        <button type="button" id="tailorButton" disabled
+                            class="flex-1 bg-green-500 text-white font-bold py-2 px-4 rounded-lg button-disabled">
                             Generate Points
                         </button>
                     </div>
@@ -124,14 +128,36 @@
     
     <script>
         let currentKeywords = [];
+        const tailorButton = document.getElementById('tailorButton');
+        
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
         
         function highlightKeywords(text, keywords) {
             let highlightedText = text;
             keywords.forEach(keyword => {
-                const regex = new RegExp(`(${keyword})`, 'gi');
-                highlightedText = highlightedText.replace(regex, '<span class="highlight-keyword">$1</span>');
+                try {
+                    const escapedKeyword = escapeRegExp(keyword);
+                    const regex = new RegExp(`(${escapedKeyword})`, 'gi');
+                    highlightedText = highlightedText.replace(regex, '<span class="highlight-keyword">$1</span>');
+                } catch (error) {
+                    console.error(`Error highlighting keyword "${keyword}":`, error);
+                }
             });
             return highlightedText;
+        }
+
+        function enableTailorButton() {
+            tailorButton.disabled = false;
+            tailorButton.classList.remove('button-disabled');
+            tailorButton.classList.add('hover:bg-green-600');
+        }
+
+        function disableTailorButton() {
+            tailorButton.disabled = true;
+            tailorButton.classList.add('button-disabled');
+            tailorButton.classList.remove('hover:bg-green-600');
         }
 
         document.getElementById('analysisForm').addEventListener('submit', async (e) => {
@@ -150,6 +176,7 @@
             document.getElementById('results').classList.add('hidden');
             document.getElementById('tailoredPoints').classList.add('hidden');
             document.getElementById('errorMessage').style.display = 'none';
+            disableTailorButton();
             
             try {
                 const response = await fetch('/api/analyze', {
@@ -187,6 +214,7 @@
                     
                     // Show results, hide loader
                     document.getElementById('results').classList.remove('hidden');
+                    enableTailorButton();
                 } else {
                     showError(data.error || 'An error occurred');
                 }
@@ -231,24 +259,28 @@
                 
                 const data = await response.json();
                 
-                if (response.ok && data.tailored_points) {
-                    // Display tailored points with highlighted keywords
-                    const pointsList = document.getElementById('pointsList');
-                    pointsList.innerHTML = '';
-                    
-                    data.tailored_points.forEach(point => {
-                        const pointElement = document.createElement('div');
-                        pointElement.className = 'bullet-point';
-                        pointElement.innerHTML = highlightKeywords(point, currentKeywords);
-                        pointsList.appendChild(pointElement);
-                    });
-                    
-                    document.getElementById('tailoredPoints').classList.remove('hidden');
-                } else {
-                    showError(data.error || 'An error occurred while generating points');
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to generate points');
                 }
+                
+                if (!data.tailored_points || !Array.isArray(data.tailored_points)) {
+                    throw new Error('Invalid response format');
+                }
+                
+                // Display tailored points with highlighted keywords
+                const pointsList = document.getElementById('pointsList');
+                pointsList.innerHTML = '';
+                
+                data.tailored_points.forEach(point => {
+                    const pointElement = document.createElement('div');
+                    pointElement.className = 'bullet-point';
+                    pointElement.innerHTML = highlightKeywords(point, currentKeywords);
+                    pointsList.appendChild(pointElement);
+                });
+                
+                document.getElementById('tailoredPoints').classList.remove('hidden');
             } catch (error) {
-                showError('An error occurred while generating points');
+                showError(error.message || 'An error occurred while generating points');
             } finally {
                 document.getElementById('loader').classList.add('hidden');
             }
@@ -271,6 +303,9 @@
                 alert('Failed to copy points. Please try selecting and copying manually.');
             });
         }
+
+        // Initially disable the tailor button
+        disableTailorButton();
     </script>
 </body>
 </html>
