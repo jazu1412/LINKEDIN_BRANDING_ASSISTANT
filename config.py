@@ -12,6 +12,11 @@ class Config:
     REDIS_PORT = int(os.getenv('REDIS_PORT'))
     REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
     
+       # Redis configuration
+    REDIS_HOST_2 = os.getenv('REDIS_HOST_2')
+    REDIS_PORT_2 = int(os.getenv('REDIS_PORT_2'))
+    REDIS_PASSWORD_2 = os.getenv('REDIS_PASSWORD_2')
+    
     # MongoDB collections
     RESUME_COLLECTION = 'resumes'
     

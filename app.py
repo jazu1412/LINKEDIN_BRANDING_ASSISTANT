@@ -29,6 +29,14 @@ r = redis.Redis(
     password=Config.REDIS_PASSWORD
 )
 
+# Redis connection for job data
+jobs_redis = redis.Redis(
+   host=Config.REDIS_HOST_2,
+   port=Config.REDIS_PORT_2,
+   password=Config.REDIS_PASSWORD_2
+)
+
+
 class SQSJobReader:
     def __init__(self):
         try:
@@ -38,6 +46,10 @@ class SQSJobReader:
         except Exception as e:
             logger.error(f"Error initializing AWS client: {str(e)}")
             return
+        
+    def get_current_hour_key(self):
+       current_time = datetime.now(timezone.utc)
+       return f"jobs:{current_time.strftime('%Y-%m-%d-%H')}"    
 
     def read_jobs(self, max_messages: int = 10) -> List[Dict]:
         if not hasattr(self, 'sqs'):
@@ -75,6 +87,16 @@ class SQSJobReader:
                     if 'timestamp' in message_body:
                         message_time = datetime.fromisoformat(message_body['timestamp'].replace('Z', '+00:00'))
                         if message_time > one_hour_ago:
+                            jobs = message_body.get('jobs', [])
+                            processed_jobs.extend(jobs)
+                          
+                           # Save to Redis with current hour as key
+                            redis_key = self.get_current_hour_key()
+                            jobs_redis.set(redis_key, json.dumps(jobs))
+                           # Set expiry to 1 hour
+                            jobs_redis.expire(redis_key, 3600)
+                          
+                            logger.info(f"Saved {len(jobs)} jobs to Redis with key: {redis_key}")
                             jobs = message_body.get('jobs', [])
                             processed_jobs.extend(jobs)
                             logger.info(f"Processing message with timestamp: {message_time}")
@@ -258,6 +280,19 @@ def analyze_form(resume_id):
 @app.route('/api/jobs')
 def get_jobs():
     try:
+        # Try to get jobs from Redis first
+        current_time = datetime.now(timezone.utc)
+        redis_key = f"jobs:{current_time.strftime('%Y-%m-%d-%H')}"
+      
+        cached_jobs = jobs_redis.get(redis_key)
+        if cached_jobs:
+            logger.info(f"Retrieved jobs from Redis cache with key: {redis_key}")
+            return jsonify(json.loads(cached_jobs))
+      
+        # If not in Redis, fetch from SQS
+        logger.info("No cached jobs found in Redis, fetching from SQS")
+
+        SQSJobReader
         reader = SQSJobReader()
         jobs = reader.read_jobs(max_messages=10)  # Get up to 10 jobs
         return jsonify(jobs)

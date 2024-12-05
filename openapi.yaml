@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Smart ATS API
+  title: Linkedin Job Assistant API
   description: API for resume analysis and job description matching
   version: 1.0.0
 
