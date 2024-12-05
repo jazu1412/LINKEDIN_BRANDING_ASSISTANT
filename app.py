@@ -4,12 +4,15 @@ import os
 import PyPDF2 as pdf
 from flask_pymongo import PyMongo
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import re
 from config import Config
 import redis
 import logging
+import boto3
+from typing import List, Dict
+from datetime import timezone
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,9 +29,68 @@ r = redis.Redis(
     password=Config.REDIS_PASSWORD
 )
 
+class SQSJobReader:
+    def __init__(self):
+        try:
+            self.sqs = boto3.client('sqs')
+            self.queue_url = "https://sqs.us-east-1.amazonaws.com/050451396927/JobListingQueue"
+            logger.info("Successfully connected to AWS SQS")
+        except Exception as e:
+            logger.error(f"Error initializing AWS client: {str(e)}")
+            return
+
+    def read_jobs(self, max_messages: int = 10) -> List[Dict]:
+        if not hasattr(self, 'sqs'):
+            logger.error("AWS client not initialized. Please check your credentials.")
+            return []
+
+        try:
+            response = self.sqs.receive_message(
+                QueueUrl=self.queue_url,
+                MaxNumberOfMessages=max_messages,
+                WaitTimeSeconds=5,
+                AttributeNames=['All'],
+                MessageAttributeNames=['All']
+            )
+            
+            processed_jobs = []
+            #one_hour_ago = datetime.utcnow() - timedelta(hours=1)
+            
+
+            one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+
+           
+
+            
+            if 'Messages' in response:
+                message_length = len(response['Messages'])  # Get the number of messages
+                logger.info(f"Message length is {message_length}")
+                message_counter = 0 
+                for message in response['Messages']:
+                    message_body = json.loads(message['Body'])
+                    message_counter += 1  # Increment the counter for each message
+                    logger.info(f"Processing new message #{message_counter}")
+                    
+                    # Check if message has timestamp and is within last hour
+                    if 'timestamp' in message_body:
+                        message_time = datetime.fromisoformat(message_body['timestamp'].replace('Z', '+00:00'))
+                        if message_time > one_hour_ago:
+                            jobs = message_body.get('jobs', [])
+                            processed_jobs.extend(jobs)
+                            logger.info(f"Processing message with timestamp: {message_time}")
+                        else:
+                            logger.info(f"Skipping old message from: {message_time}")
+                    else:
+                        logger.warning("Message missing timestamp")
+            
+            return processed_jobs
+            
+        except Exception as e:
+            logger.error(f"Error reading from SQS: {str(e)}")
+            return []
+
 # Ensure database and collection exist
 with app.app_context():
-    # Create collection if it doesn't exist
     if Config.RESUME_COLLECTION not in mongo.db.list_collection_names():
         mongo.db.create_collection(Config.RESUME_COLLECTION)
         logger.info(f"Created MongoDB collection: {Config.RESUME_COLLECTION}")
@@ -36,19 +98,12 @@ with app.app_context():
 genai.configure(api_key=Config.GOOGLE_API_KEY)
 
 def clean_text(text):
-    # Fix missing spaces between words (camelCase to spaces)
     text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-    # Fix missing spaces between words (PascalCase to spaces)
     text = re.sub(r'([A-Z])([A-Z][a-z])', r'\1 \2', text)
-    # Fix missing spaces after periods
     text = re.sub(r'\.([A-Z])', r'. \1', text)
-    # Fix missing spaces after commas
     text = re.sub(r',([A-Za-z])', r', \1', text)
-    # Fix missing spaces around pipe symbols
     text = re.sub(r'\|', ' | ', text)
-    # Fix missing spaces around email symbols
     text = re.sub(r'([a-zA-Z])@', r'\1 @', text)
-    # Remove extra whitespace
     text = ' '.join(text.split())
     return text
 
@@ -104,8 +159,8 @@ def get_gemini_response(text, jd):
             
         return parsed_json
     except Exception as e:
-        print(f"JSON parsing error: {e}")
-        print(f"Response text: {response_text}")
+        logger.error(f"JSON parsing error: {e}")
+        logger.error(f"Response text: {response_text}")
         raise Exception("Failed to parse Gemini API response")
 
 def tailor_resume_points(resume_text, jd_text, keywords):
@@ -150,13 +205,11 @@ def tailor_resume_points(resume_text, jd_text, keywords):
         if response_text.startswith('```json'):
             response_text = response_text[7:-3].strip()
         
-        # Clean up any potential formatting issues
         response_text = re.sub(r'"\s+(?=")', '", ', response_text)
         response_text = re.sub(r'"\s+(?="\w+":)', '", ', response_text)
         
         parsed_json = json.loads(response_text)
         
-        # Validate response structure
         if not isinstance(parsed_json, dict) or 'tailored_points' not in parsed_json:
             raise ValueError("Invalid response format")
         
@@ -164,12 +217,12 @@ def tailor_resume_points(resume_text, jd_text, keywords):
             raise ValueError("tailored_points must be an array")
         
         return {
-            'tailored_points': parsed_json['tailored_points'][:4]  # Ensure exactly 4 points
+            'tailored_points': parsed_json['tailored_points'][:4]
         }
         
     except Exception as e:
-        print(f"Error in tailor_resume_points: {str(e)}")
-        print(f"Response text: {response_text if 'response_text' in locals() else 'No response text'}")
+        logger.error(f"Error in tailor_resume_points: {str(e)}")
+        logger.error(f"Response text: {response_text if 'response_text' in locals() else 'No response text'}")
         return {
             'tailored_points': [
                 "Developed and implemented software solutions utilizing required programming languages and frameworks",
@@ -194,9 +247,23 @@ def allowed_file(filename):
 def index():
     return render_template('upload.html')
 
+@app.route('/jobs')
+def jobs_page():
+    return render_template('jobs.html')
+
 @app.route('/analyze-form/<resume_id>')
 def analyze_form(resume_id):
     return render_template('analyze.html', resume_id=resume_id)
+
+@app.route('/api/jobs')
+def get_jobs():
+    try:
+        reader = SQSJobReader()
+        jobs = reader.read_jobs(max_messages=10)  # Get up to 10 jobs
+        return jsonify(jobs)
+    except Exception as e:
+        logger.error(f"Error getting jobs: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/resume', methods=['POST'])
 def upload_resume():
@@ -211,10 +278,8 @@ def upload_resume():
         if not allowed_file(resume_file.filename):
             return jsonify({'error': 'Please upload a PDF file'}), 400
         
-        # Extract text from PDF
         resume_text = extract_text_from_pdf(resume_file)
         
-        # Store in MongoDB
         logger.info(f"Storing resume in MongoDB: {resume_file.filename}")
         result = mongo.db[Config.RESUME_COLLECTION].insert_one({
             'text': resume_text,
@@ -224,7 +289,6 @@ def upload_resume():
         resume_id = str(result.inserted_id)
         logger.info(f"Successfully stored resume in MongoDB with ID: {resume_id}")
         
-        # Store in Redis cache
         r.set(f"resume:{resume_id}", resume_text)
         logger.info(f"Stored resume {resume_id} in Redis cache")
         
@@ -250,12 +314,10 @@ def analyze_job():
         if not resume_id or not job_description:
             return jsonify({'error': 'Missing resume_id or job_description'}), 400
         
-        # Try to get resume from Redis first
         resume_text = r.get(f"resume:{resume_id}")
         
         if resume_text is None:
             logger.info(f"Resume {resume_id} not found in Redis cache, fetching from MongoDB")
-            # If not in Redis, get from MongoDB and store in Redis
             resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
             if not resume:
                 logger.error(f"Resume {resume_id} not found in MongoDB")
@@ -268,7 +330,6 @@ def analyze_job():
             logger.info(f"Retrieved resume {resume_id} from Redis cache")
             resume_text = resume_text.decode('utf-8')
         
-        # Get analysis from Gemini
         analysis = get_gemini_response(resume_text, job_description)
         
         return jsonify(analysis)
@@ -291,12 +352,10 @@ def tailor_resume_endpoint():
         if not resume_id or not job_description:
             return jsonify({'error': 'Missing resume_id or job_description'}), 400
         
-        # Try to get resume from Redis first
         resume_text = r.get(f"resume:{resume_id}")
         
         if resume_text is None:
             logger.info(f"Resume {resume_id} not found in Redis cache, fetching from MongoDB")
-            # If not in Redis, get from MongoDB and store in Redis
             resume = mongo.db[Config.RESUME_COLLECTION].find_one({'_id': ObjectId(resume_id)})
             if not resume:
                 logger.error(f"Resume {resume_id} not found in MongoDB")
@@ -309,7 +368,6 @@ def tailor_resume_endpoint():
             logger.info(f"Retrieved resume {resume_id} from Redis cache")
             resume_text = resume_text.decode('utf-8')
         
-        # Get tailored points from Gemini
         result = tailor_resume_points(resume_text, job_description, keywords)
         
         return jsonify(result)

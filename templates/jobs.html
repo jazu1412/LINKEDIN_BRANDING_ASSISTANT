@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Latest Jobs - Smart ATS</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #3498db;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-white shadow-lg">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center py-4">
+                <a href="/" class="text-xl font-bold text-blue-600">Smart ATS</a>
+                <div class="space-x-4">
+                    <a href="/" class="text-gray-700 hover:text-blue-600">Resume Analysis</a>
+                    <a href="/jobs" class="text-blue-600 font-semibold">Latest Jobs</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">Available Jobs</h1>
+            <button onclick="refreshJobs()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                Refresh Jobs
+            </button>
+        </div>
+
+        <div id="loader" class="hidden flex justify-center items-center py-8">
+            <div class="loader"></div>
+        </div>
+
+        <div id="jobsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Jobs will be dynamically inserted here -->
+        </div>
+
+        <div id="noJobs" class="hidden text-center py-8">
+            <p class="text-gray-600 text-lg">No jobs available at the moment. Please try again later.</p>
+        </div>
+    </div>
+
+    <script>
+        function formatTimeAgo(timestamp) {
+            const now = new Date();
+            const jobDate = new Date(timestamp);
+            const diffMinutes = Math.floor((now - jobDate) / 1000 / 60);
+            
+            if (diffMinutes < 1) return 'Just now';
+            if (diffMinutes === 1) return '1 minute ago';
+            if (diffMinutes < 60) return `${diffMinutes} minutes ago`;
+            if (diffMinutes < 120) return '1 hour ago';
+            if (diffMinutes < 1440) return `${Math.floor(diffMinutes / 60)} hours ago`;
+            if (diffMinutes < 2880) return '1 day ago';
+            return `${Math.floor(diffMinutes / 1440)} days ago`;
+        }
+
+        function createJobCard(job) {
+            return `
+                <div class="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
+                    <h2 class="text-xl font-bold text-gray-800 mb-2">${job.title}</h2>
+                    <p class="text-gray-600 mb-4">${job.companyName}</p>
+                    <div class="flex justify-between items-center text-sm text-gray-500 mb-4">
+                        <span>${formatTimeAgo(job.listedAt)}</span>
+                    </div>
+                    <a href="${job.jobPostingUrl}" target="_blank" 
+                       class="block w-full text-center bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                        View Job
+                    </a>
+                </div>
+            `;
+        }
+
+        async function refreshJobs() {
+            const loader = document.getElementById('loader');
+            const jobsContainer = document.getElementById('jobsContainer');
+            const noJobs = document.getElementById('noJobs');
+
+            loader.classList.remove('hidden');
+            jobsContainer.innerHTML = '';
+            noJobs.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/jobs');
+                const jobs = await response.json();
+
+                if (jobs.length === 0) {
+                    noJobs.classList.remove('hidden');
+                } else {
+                    jobs.forEach(job => {
+                        jobsContainer.innerHTML += createJobCard(job);
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching jobs:', error);
+                alert('Failed to fetch jobs. Please try again.');
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        // Load jobs when page loads
+        refreshJobs();
+    </script>
+</body>
+</html>
