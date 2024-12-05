@@ -66,14 +66,8 @@ class SQSJobReader:
             )
             
             processed_jobs = []
-            #one_hour_ago = datetime.utcnow() - timedelta(hours=1)
-            
-
             one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
 
-           
-
-            
             if 'Messages' in response:
                 message_length = len(response['Messages'])  # Get the number of messages
                 logger.info(f"Message length is {message_length}")
@@ -267,6 +261,10 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
+    return render_template('index.html')
+
+@app.route('/upload')
+def upload():
     return render_template('upload.html')
 
 @app.route('/jobs')
