@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import google.generativeai as genai
 import os
 import PyPDF2 as pdf
@@ -13,14 +13,32 @@ import logging
 import boto3
 from typing import List, Dict
 from datetime import timezone
+from authlib.integrations.flask_client import OAuth
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
+app.secret_key = os.urandom(24)  # Use a secure random key in production
 app.config['MONGO_URI'] = Config.MONGO_URI
 mongo = PyMongo(app)
+
+# Initialize OAuth
+oauth = OAuth(app)
+oauth.register(
+    name='cognito',
+    api_base_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com',
+    authorize_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/login/continue',
+    access_token_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/oauth2/token',
+    client_id='6g7hokgbb3s91ocg72umebbg22',
+    client_secret='b5fqvh6il61ff4vboef9gdthumtde2gd1h7jcjeshfg71khidj1',
+    client_kwargs={'scope': 'email openid phone'},
+    server_metadata_url='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl/.well-known/openid-configuration'
+)
 
 # Redis connection using config
 r = redis.Redis(
@@ -36,6 +54,13 @@ jobs_redis = redis.Redis(
    password=Config.REDIS_PASSWORD_2
 )
 
+def login_required(f):
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
 
 class SQSJobReader:
     def __init__(self):
@@ -69,25 +94,22 @@ class SQSJobReader:
             one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
 
             if 'Messages' in response:
-                message_length = len(response['Messages'])  # Get the number of messages
+                message_length = len(response['Messages'])
                 logger.info(f"Message length is {message_length}")
                 message_counter = 0 
                 for message in response['Messages']:
                     message_body = json.loads(message['Body'])
-                    message_counter += 1  # Increment the counter for each message
+                    message_counter += 1
                     logger.info(f"Processing new message #{message_counter}")
                     
-                    # Check if message has timestamp and is within last hour
                     if 'timestamp' in message_body:
                         message_time = datetime.fromisoformat(message_body['timestamp'].replace('Z', '+00:00'))
                         if message_time > one_hour_ago:
                             jobs = message_body.get('jobs', [])
                             processed_jobs.extend(jobs)
                           
-                           # Save to Redis with current hour as key
                             redis_key = self.get_current_hour_key()
                             jobs_redis.set(redis_key, json.dumps(jobs))
-                           # Set expiry to 1 hour
                             jobs_redis.expire(redis_key, 3600)
                           
                             logger.info(f"Saved {len(jobs)} jobs to Redis with key: {redis_key}")
@@ -261,24 +283,60 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
+    user = session.get('user')
+    if user:
+        return render_template('index.html', user=user)
     return render_template('index.html')
 
+@app.route('/login')
+def login():
+    return oauth.cognito.authorize_redirect(
+        redirect_uri='http://localhost:5000/auth/callback',
+        response_type='code'
+    )
+
+@app.route('/auth/callback')
+def auth_callback():
+    try:
+        token = oauth.cognito.authorize_access_token()
+        logger.info(f"Token received: {token}")
+        user_info = token.get('userinfo')
+        
+        if user_info:
+            session['user'] = user_info
+            logger.info(f"User successfully authenticated: {user_info.get('email')}")
+            return redirect(url_for('index'))
+        else:
+            logger.error("No user info in token response")
+            return redirect(url_for('index'))
+    except Exception as e:
+        logger.error(f"Error in auth callback: {str(e)}")
+        return redirect(url_for('index'))
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('index'))
+
 @app.route('/upload')
+@login_required
 def upload():
     return render_template('upload.html')
 
 @app.route('/jobs')
+@login_required
 def jobs_page():
     return render_template('jobs.html')
 
 @app.route('/analyze-form/<resume_id>')
+@login_required
 def analyze_form(resume_id):
     return render_template('analyze.html', resume_id=resume_id)
 
 @app.route('/api/jobs')
+@login_required
 def get_jobs():
     try:
-        # Try to get jobs from Redis first
         current_time = datetime.now(timezone.utc)
         redis_key = f"jobs:{current_time.strftime('%Y-%m-%d-%H')}"
       
@@ -287,18 +345,17 @@ def get_jobs():
             logger.info(f"Retrieved jobs from Redis cache with key: {redis_key}")
             return jsonify(json.loads(cached_jobs))
       
-        # If not in Redis, fetch from SQS
         logger.info("No cached jobs found in Redis, fetching from SQS")
 
-        SQSJobReader
         reader = SQSJobReader()
-        jobs = reader.read_jobs(max_messages=10)  # Get up to 10 jobs
+        jobs = reader.read_jobs(max_messages=10)
         return jsonify(jobs)
     except Exception as e:
         logger.error(f"Error getting jobs: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/resume', methods=['POST'])
+@login_required
 def upload_resume():
     try:
         if 'resume' not in request.files:
@@ -335,6 +392,7 @@ def upload_resume():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/analyze', methods=['POST'])
+@login_required
 def analyze_job():
     try:
         data = request.get_json()
@@ -372,6 +430,7 @@ def analyze_job():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tailor', methods=['POST'])
+@login_required
 def tailor_resume_endpoint():
     try:
         data = request.get_json()
@@ -410,4 +469,4 @@ def tailor_resume_endpoint():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+     app.run(host='::', port=5000, debug=True)

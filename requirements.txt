@@ -4,3 +4,8 @@ google-generativeai
 python-dotenv
 pymongo
 flask-pymongo
+authlib
+werkzeug
+requests
+redis
+boto3

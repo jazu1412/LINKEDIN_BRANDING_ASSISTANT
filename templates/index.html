@@ -25,41 +25,57 @@
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
                 <a href="/" class="text-xl font-bold text-blue-600">Linkedin Job Assistant</a>
-                <div class="space-x-4">
-                    <a href="/upload" class="text-gray-700 hover:text-blue-600">Resume Analysis</a>
-                    <a href="/jobs" class="text-blue-600 font-semibold">Latest Jobs</a>
+                <div class="flex items-center space-x-4">
+                    {% if user %}
+                        <span class="text-gray-600">{{ user.email }}</span>
+                        <a href="/upload" class="text-gray-700 hover:text-blue-600">Resume Analysis</a>
+                        <a href="/jobs" class="text-blue-600 font-semibold">Latest Jobs</a>
+                        <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600">Logout</a>
+                    {% else %}
+                        <a href="/login" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">Login</a>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </nav>
 
     <div class="container mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">Latest LinkedIn Jobs</h1>
-            <button onclick="refreshJobs()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
-                Refresh Jobs
-            </button>
-        </div>
+        {% if not user %}
+            <div class="text-center py-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-4">Welcome to LinkedIn Job Assistant</h1>
+                <p class="text-gray-600 mb-8">Please login to access job listings and resume analysis features.</p>
+                <a href="/login" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 inline-block">
+                    Login to Continue
+                </a>
+            </div>
+        {% else %}
+            <div class="flex justify-between items-center mb-8">
+                <h1 class="text-3xl font-bold text-gray-800">Latest LinkedIn Jobs</h1>
+                <button onclick="refreshJobs()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                    Refresh Jobs
+                </button>
+            </div>
 
-        <div id="loader" class="hidden flex justify-center items-center py-8">
-            <div class="loader"></div>
-        </div>
+            <div id="loader" class="hidden flex justify-center items-center py-8">
+                <div class="loader"></div>
+            </div>
 
-        <div id="jobsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <!-- Jobs will be dynamically inserted here -->
-        </div>
+            <div id="jobsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Jobs will be dynamically inserted here -->
+            </div>
 
-        <div id="noJobs" class="hidden text-center py-8">
-            <p class="text-gray-600 text-lg">No jobs available at the moment. Please try again later.</p>
-        </div>
+            <div id="noJobs" class="hidden text-center py-8">
+                <p class="text-gray-600 text-lg">No jobs available at the moment. Please try again later.</p>
+            </div>
 
-        <!-- Resume Analysis CTA -->
-        <div class="mt-12 text-center">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Want to check if your resume matches these jobs?</h2>
-            <a href="/upload" class="inline-block bg-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                Analyze Your Resume
-            </a>
-        </div>
+            <!-- Resume Analysis CTA -->
+            <div class="mt-12 text-center">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Want to check if your resume matches these jobs?</h2>
+                <a href="/upload" class="inline-block bg-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    Analyze Your Resume
+                </a>
+            </div>
+        {% endif %}
     </div>
     
     <script>
@@ -121,8 +137,10 @@
             }
         }
 
-        // Load jobs when page loads
-        refreshJobs();
+        {% if user %}
+            // Load jobs when page loads only if user is logged in
+            refreshJobs();
+        {% endif %}
     </script>
 </body>
 </html>
