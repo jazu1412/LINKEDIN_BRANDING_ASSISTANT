@@ -16,6 +16,7 @@ from datetime import timezone
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,18 +27,15 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 app.secret_key = os.urandom(24)  # Use a secure random key in production
 app.config['MONGO_URI'] = Config.MONGO_URI
 mongo = PyMongo(app)
-
-# Initialize OAuth
 oauth = OAuth(app)
+
 oauth.register(
-    name='cognito',
-    api_base_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com',
-    authorize_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/login/continue',
-    access_token_url=f'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/oauth2/token',
-    client_id='6g7hokgbb3s91ocg72umebbg22',
-    client_secret='b5fqvh6il61ff4vboef9gdthumtde2gd1h7jcjeshfg71khidj1',
-    client_kwargs={'scope': 'email openid phone'},
-    server_metadata_url='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl/.well-known/openid-configuration'
+  name='oidc',
+  authority='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl',
+  client_id='6g7hokgbb3s91ocg72umebbg22',
+  client_secret='b5fqvh6il61ff4vboef9gdthumtde2gd1h7jcjeshfg71khidj1',
+  server_metadata_url='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl/.well-known/openid-configuration',
+  client_kwargs={'scope': 'email openid phone'}
 )
 
 # Redis connection using config
@@ -290,7 +288,7 @@ def index():
 
 @app.route('/login')
 def login():
-    return oauth.cognito.authorize_redirect(
+    return oauth.oidc.authorize_redirect(
         redirect_uri='http://localhost:5000/auth/callback',
         response_type='code'
     )
@@ -298,7 +296,7 @@ def login():
 @app.route('/auth/callback')
 def auth_callback():
     try:
-        token = oauth.cognito.authorize_access_token()
+        token = oauth.oidc.authorize_access_token()
         logger.info(f"Token received: {token}")
         user_info = token.get('userinfo')
         
@@ -315,8 +313,15 @@ def auth_callback():
 
 @app.route('/logout')
 def logout():
-    session.pop('user', None)
-    return redirect(url_for('index'))
+    session.pop('user', None)  # Clear the user's session locally
+
+    # Redirect to Cognito's logout endpoint (optional)
+    cognito_logout_url = (
+        "https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/logout?"
+        "client_id=6g7hokgbb3s91ocg72umebbg22&"
+        "logout_uri=http://localhost:5000/"
+    )
+    return redirect(cognito_logout_url)  # Redirect to Cognito's logout URL
 
 @app.route('/upload')
 @login_required
