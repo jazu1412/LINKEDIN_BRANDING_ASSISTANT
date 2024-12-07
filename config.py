@@ -26,9 +26,14 @@ class Config:
     ALLOWED_EXTENSIONS = {'pdf'}
 
     # AWS Cognito Configuration
-    COGNITO_REGION = 'us-east-1'
-    COGNITO_USER_POOL_ID = 'us-east-1_juPVlepSl'
-    COGNITO_CLIENT_ID = '6g7hokgbb3s91ocg72umebbg22'
-    COGNITO_DOMAIN = 'https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com'
-    COGNITO_REDIRECT_URL = 'http://localhost:5000/auth/callback'
+    AWS_REGION = os.getenv('AWS_REGION')
+    COGNITO_USER_POOL_ID = os.getenv('COGNITO_USER_POOL_ID')
+    COGNITO_CLIENT_ID = os.getenv('COGNITO_CLIENT_ID')
+    COGNITO_CLIENT_SECRET = os.getenv('COGNITO_CLIENT_SECRET')
+    COGNITO_DOMAIN = os.getenv('COGNITO_DOMAIN')  # The UI domain
+    COGNITO_AUTHORITY = f"https://cognito-idp.{os.getenv('AWS_REGION')}.amazonaws.com/{os.getenv('COGNITO_USER_POOL_ID')}"  # The authority URL
+    COGNITO_REDIRECT_URL = os.getenv('COGNITO_REDIRECT_URL')
     COGNITO_SCOPES = ['email', 'openid', 'phone']
+
+    # AWS SQS Configuration
+    SQS_QUEUE_URL = os.getenv('SQS_QUEUE_URL')

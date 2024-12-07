@@ -26,19 +26,18 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
-
 app.secret_key = os.urandom(24)  # Use a secure random key in production
 app.config['MONGO_URI'] = Config.MONGO_URI
 mongo = PyMongo(app)
 oauth = OAuth(app)
 
 oauth.register(
-  name='oidc',
-  authority='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl',
-  client_id='6g7hokgbb3s91ocg72umebbg22',
-  client_secret='b5fqvh6il61ff4vboef9gdthumtde2gd1h7jcjeshfg71khidj1',
-  server_metadata_url='https://cognito-idp.us-east-1.amazonaws.com/us-east-1_juPVlepSl/.well-known/openid-configuration',
-  client_kwargs={'scope': 'email openid phone'}
+    name='oidc',
+    authority=Config.COGNITO_AUTHORITY,
+    client_id=Config.COGNITO_CLIENT_ID,
+    client_secret=Config.COGNITO_CLIENT_SECRET,
+    server_metadata_url=f"{Config.COGNITO_AUTHORITY}/.well-known/openid-configuration",
+    client_kwargs={'scope': ' '.join(Config.COGNITO_SCOPES)}
 )
 
 # Redis connection using config
@@ -57,11 +56,11 @@ jobs_redis = redis.Redis(
 
 # LinkedIn Profile Assistant Configs
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH
 
 # Configure OpenAI API key from Config
 openai.api_key = Config.OPENAI_API_KEY
-ALLOWED_EXTENSIONS = {'pdf', 'txt'}
+ALLOWED_EXTENSIONS = Config.ALLOWED_EXTENSIONS
 
 def login_required(f):
     def decorated_function(*args, **kwargs):
@@ -74,8 +73,8 @@ def login_required(f):
 class SQSJobReader:
     def __init__(self):
         try:
-            self.sqs = boto3.client('sqs')
-            self.queue_url = "https://sqs.us-east-1.amazonaws.com/050451396927/JobListingQueue"
+            self.sqs = boto3.client('sqs', region_name=Config.AWS_REGION)
+            self.queue_url = Config.SQS_QUEUE_URL
             logger.info("Successfully connected to AWS SQS")
         except Exception as e:
             logger.error(f"Error initializing AWS client: {str(e)}")
@@ -300,7 +299,7 @@ def index():
 @app.route('/login')
 def login():
     return oauth.oidc.authorize_redirect(
-        redirect_uri='http://localhost:5000/auth/callback',
+        redirect_uri=Config.COGNITO_REDIRECT_URL,
         response_type='code'
     )
 
@@ -326,13 +325,13 @@ def auth_callback():
 def logout():
     session.pop('user', None)  # Clear the user's session locally
 
-    # Redirect to Cognito's logout endpoint (optional)
+    # Redirect to Cognito's logout endpoint
     cognito_logout_url = (
-        "https://us-east-1jupvlepsl.auth.us-east-1.amazoncognito.com/logout?"
-        "client_id=6g7hokgbb3s91ocg72umebbg22&"
-        "logout_uri=http://localhost:5000/"
+        f"{Config.COGNITO_DOMAIN}/logout?"
+        f"client_id={Config.COGNITO_CLIENT_ID}&"
+        f"logout_uri={Config.COGNITO_REDIRECT_URL}"
     )
-    return redirect(cognito_logout_url)  # Redirect to Cognito's logout URL
+    return redirect(cognito_logout_url)
 
 @app.route('/upload')
 @login_required
@@ -389,7 +388,7 @@ def upload_resume():
         if not allowed_file(resume_file.filename):
             return jsonify({'error': 'Please upload a PDF file'}), 400
         
-        resume_text = extract_text_from_pdf(resume_file)
+        resume_text = extract_text_from_pdf_jazu(resume_file)
         
         logger.info(f"Storing resume in MongoDB: {resume_file.filename}")
         result = mongo.db[Config.RESUME_COLLECTION].insert_one({
@@ -491,6 +490,13 @@ def tailor_resume_endpoint():
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def extract_text_from_pdf_jazu(pdf_file):
+    reader = pdf.PdfReader(pdf_file)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() + "\n"
+    return clean_text(text)
 
 def extract_text_from_pdf(pdf_path):
     text = ""
