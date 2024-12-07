@@ -17,7 +17,6 @@ from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
 import openai
 from werkzeug.utils import secure_filename
-from dotenv import load_dotenv
 import PyPDF2
 
 # Configure logging
@@ -56,20 +55,13 @@ jobs_redis = redis.Redis(
    password=Config.REDIS_PASSWORD_2
 )
 
-
-
-# LinkedIn Profile Assitant Configs
+# LinkedIn Profile Assistant Configs
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-# Load environment variables
-load_dotenv()
-openai.api_key = os.getenv('OPENAI_API_KEY')
+
+# Configure OpenAI API key from Config
+openai.api_key = Config.OPENAI_API_KEY
 ALLOWED_EXTENSIONS = {'pdf', 'txt'}
-
-
-
-
-
 
 def login_required(f):
     def decorated_function(*args, **kwargs):
@@ -352,7 +344,6 @@ def upload():
 def jobs_page():
     return render_template('jobs.html')
 
-
 @app.route('/analyze-form/<resume_id>')
 @login_required
 def analyze_form(resume_id):
@@ -362,7 +353,6 @@ def analyze_form(resume_id):
 @login_required
 def linkedInProfileAssistant():
     return render_template('linkedInProfileAssistant.html')
-
 
 @app.route('/api/jobs')
 @login_required
@@ -498,10 +488,6 @@ def tailor_resume_endpoint():
     except Exception as e:
         logger.error(f"Error in tailor_resume_endpoint: {str(e)}")
         return jsonify({'error': str(e)}), 500
-
-
-
-
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -651,9 +637,7 @@ def analyze_resume_with_gpt(resume_text):
         print(f"Error in GPT analysis: {str(e)}")
         return None
 
-
-# api for linkedIn profile Assitant
-
+# api for linkedIn profile Assistant
 @app.route('/upload_resume_for_linkedIn_profile', methods=['POST'])
 def upload_resume_for_linkedIn_profile():
     if 'resume' not in request.files:
@@ -725,7 +709,6 @@ def upload_resume_for_linkedIn_profile():
             return jsonify({'error': str(e)}), 500
             
     return jsonify({'error': 'Invalid file type. Please upload a PDF or TXT file.'}), 400
-
 
 if __name__ == '__main__':
      app.run(host='::', port=5000, debug=True)

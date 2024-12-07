@@ -6,6 +6,7 @@ load_dotenv()
 class Config:
     MONGO_URI = os.getenv('MONGO_URI', '').replace('/?', '/resume_db?')  # Specify database name
     GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+    OPENAI_API_KEY = os.getenv('OPEN-AI-KEY')  # Added OpenAI key
     
     # Redis configuration
     REDIS_HOST = os.getenv('REDIS_HOST')
