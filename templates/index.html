@@ -25,7 +25,8 @@
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
                 <a href="/" class="text-xl font-bold text-blue-600">Linkedin Job Assistant</a>
-                <div class="flex items-center space-x-4">
+                <!-- commented Dev: subhash Date: Dec 6 -->
+                <!-- <div class="flex items-center space-x-4">
                     {% if user %}
                         <span class="text-gray-600">{{ user.email }}</span>
                         <a href="/upload" class="text-gray-700 hover:text-blue-600">Resume Analysis</a>
@@ -34,7 +35,22 @@
                     {% else %}
                         <a href="/login" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">Login</a>
                     {% endif %}
+                </div> --> 
+
+                <div class="flex items-center justify-end gap-6">
+                    {% if user %}
+                        <span class="text-gray-600 truncate max-w-[200px]">{{ user.email }}</span>
+                        <nav class="flex items-center gap-6">
+                            <a href="/upload" class="text-gray-700 hover:text-blue-600 whitespace-nowrap">Resume Analysis</a>
+                            <a href="/jobs" class="text-blue-600 font-semibold whitespace-nowrap">Latest Jobs</a>
+                            <a href="/linkedInProfileAssistant" class="text-blue-600 font-semibold whitespace-nowrap">LinkedIn Profile Assistant</a>
+                        </nav>
+                        <a href="/logout" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 whitespace-nowrap">Logout</a>
+                    {% else %}
+                        <a href="/login" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">Login</a>
+                    {% endif %}
                 </div>
+                 
             </div>
         </div>
     </nav>

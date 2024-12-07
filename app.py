@@ -15,7 +15,10 @@ from typing import List, Dict
 from datetime import timezone
 from authlib.integrations.flask_client import OAuth
 from werkzeug.middleware.proxy_fix import ProxyFix
-
+import openai
+from werkzeug.utils import secure_filename
+from dotenv import load_dotenv
+import PyPDF2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -23,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
+
 
 app.secret_key = os.urandom(24)  # Use a secure random key in production
 app.config['MONGO_URI'] = Config.MONGO_URI
@@ -51,6 +55,21 @@ jobs_redis = redis.Redis(
    port=Config.REDIS_PORT_2,
    password=Config.REDIS_PASSWORD_2
 )
+
+
+
+# LinkedIn Profile Assitant Configs
+app.config['UPLOAD_FOLDER'] = 'static/uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+# Load environment variables
+load_dotenv()
+openai.api_key = os.getenv('OPENAI_API_KEY')
+ALLOWED_EXTENSIONS = {'pdf', 'txt'}
+
+
+
+
+
 
 def login_required(f):
     def decorated_function(*args, **kwargs):
@@ -333,10 +352,17 @@ def upload():
 def jobs_page():
     return render_template('jobs.html')
 
+
 @app.route('/analyze-form/<resume_id>')
 @login_required
 def analyze_form(resume_id):
     return render_template('analyze.html', resume_id=resume_id)
+
+@app.route('/linkedInProfileAssistant')
+@login_required
+def linkedInProfileAssistant():
+    return render_template('linkedInProfileAssistant.html')
+
 
 @app.route('/api/jobs')
 @login_required
@@ -472,6 +498,234 @@ def tailor_resume_endpoint():
     except Exception as e:
         logger.error(f"Error in tailor_resume_endpoint: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def extract_text_from_pdf(pdf_path):
+    text = ""
+    try:
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            for page in pdf_reader.pages:
+                text += page.extract_text() + "\n"
+    except Exception as e:
+        print(f"Error extracting text from PDF: {str(e)}")
+        return None
+    return text
+
+def analyze_resume_with_gpt(resume_text):
+    prompt = f"""
+    Analyze the following resume and create a detailed LinkedIn-style profile. Extract ALL experiences, certifications, and other details from the resume.
+    Provide a JSON response with the following structure. Each section should include ALL relevant items found in the resume:
+    
+    {{
+        "name": "Full name of the person",
+        "headline": "Professional headline/current role",
+        "location": "City, Country",
+        "about": "Detailed professional summary",
+        "experience": [
+            {{
+                "title": "Job title",
+                "company": "Company name",
+                "duration": "Employment period",
+                "description": "Detailed job responsibilities and achievements"
+            }},
+            // Include ALL work experiences found in the resume
+        ],
+        "education": [
+            {{
+                "degree": "Degree name",
+                "school": "Institution name",
+                "duration": "Study period",
+                "description": "Additional details about the education"
+            }},
+            // Include ALL educational qualifications
+        ],
+        "projects": [
+            {{
+                "name": "Project name",
+                "description": "Detailed project description",
+                "technologies": "All technologies used",
+                "duration": "Project period"
+            }},
+            // Include ALL projects mentioned
+        ],
+        "certifications": [
+            {{
+                "name": "Certification name",
+                "issuer": "Issuing organization",
+                "date": "Issue date",
+                "description": "Additional details about the certification"
+            }},
+            // Include ALL certifications found
+        ],
+        "skills": [
+            // List ALL technical and professional skills mentioned
+        ],
+        "awards": [
+            {{
+                "name": "Award name",
+                "issuer": "Issuing organization",
+                "date": "Date received",
+                "description": "Detailed award description"
+            }},
+            // Include ALL awards and honors
+        ],
+        "recommendations": [
+            {{
+                "text": "Detailed AI-generated recommendation based on experience",
+                "recommender": "Generated recommender name and title"
+            }},
+            // Generate 2-3 meaningful recommendations
+        ]
+    }}
+
+    Important:
+    1. Include ALL experiences, certifications, and other items found in the resume
+    2. Don't limit the number of items in any section
+    3. Provide detailed descriptions for each item
+    4. Ensure all dates and durations are properly formatted
+    5. Extract as much detail as possible from the resume
+
+    Resume content:
+    {resume_text}
+    """
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system", 
+                    "content": "You are a professional resume analyzer that creates detailed LinkedIn profiles. Always respond with valid JSON matching the specified structure. Include ALL experiences, certifications, and other items found in the resume. Don't limit the number of items in any section."
+                },
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=3000  # Increased token limit to handle more content
+        )
+        
+        # Get the response content
+        content = response.choices[0].message['content']
+        
+        # Ensure the response is valid JSON
+        try:
+            # Try to parse it as JSON
+            json_data = json.loads(content)
+            
+            # Ensure all sections are arrays even if empty
+            array_sections = ['experience', 'education', 'projects', 'certifications', 'skills', 'awards', 'recommendations']
+            for section in array_sections:
+                if section not in json_data:
+                    json_data[section] = []
+                elif not isinstance(json_data[section], list):
+                    json_data[section] = [json_data[section]]
+            
+            return json_data
+            
+        except json.JSONDecodeError:
+            # If it's not valid JSON, try to extract JSON portion
+            start_idx = content.find('{')
+            end_idx = content.rfind('}') + 1
+            if start_idx != -1 and end_idx != 0:
+                json_str = content[start_idx:end_idx]
+                json_data = json.loads(json_str)
+                
+                # Ensure all sections are arrays even if empty
+                array_sections = ['experience', 'education', 'projects', 'certifications', 'skills', 'awards', 'recommendations']
+                for section in array_sections:
+                    if section not in json_data:
+                        json_data[section] = []
+                    elif not isinstance(json_data[section], list):
+                        json_data[section] = [json_data[section]]
+                
+                return json_data
+            return None
+            
+    except Exception as e:
+        print(f"Error in GPT analysis: {str(e)}")
+        return None
+
+
+# api for linkedIn profile Assitant
+
+@app.route('/upload_resume_for_linkedIn_profile', methods=['POST'])
+def upload_resume_for_linkedIn_profile():
+    if 'resume' not in request.files:
+        return jsonify({'error': 'No file part'}), 400
+    
+    file = request.files['resume']
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    if file and allowed_file(file.filename):
+        try:
+            # Save the uploaded file
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # Extract text based on file type
+            if filename.endswith('.pdf'):
+                resume_text = extract_text_from_pdf(filepath)
+            else:  # txt file
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    resume_text = f.read()
+            
+            if not resume_text:
+                return jsonify({'error': 'Could not extract text from file'}), 400
+            
+            # Get GPT analysis
+            profile_data = analyze_resume_with_gpt(resume_text)
+            
+            if not profile_data:
+                return jsonify({'error': 'Could not analyze resume'}), 500
+            
+            # Clean up the uploaded file
+            os.remove(filepath)
+            
+            # Add default profile picture URL
+            profile_data['profile_picture'] = "https://via.placeholder.com/150"
+            
+            # Calculate profile strength based on section completeness
+            sections = ['about', 'experience', 'education', 'projects', 'certifications', 'skills', 'awards', 'recommendations']
+            section_weights = {
+                'about': 15,
+                'experience': 25,
+                'education': 15,
+                'skills': 15,
+                'projects': 10,
+                'certifications': 10,
+                'awards': 5,
+                'recommendations': 5
+            }
+            
+            total_weight = 0
+            for section, weight in section_weights.items():
+                if section in profile_data:
+                    if isinstance(profile_data[section], list):
+                        if len(profile_data[section]) > 0:
+                            total_weight += weight
+                    elif profile_data[section]:  # For non-list sections like 'about'
+                        total_weight += weight
+            
+            profile_data['profile_strength'] = total_weight
+            
+            return jsonify(profile_data)
+            
+        except Exception as e:
+            # Clean up file if it exists
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            return jsonify({'error': str(e)}), 500
+            
+    return jsonify({'error': 'Invalid file type. Please upload a PDF or TXT file.'}), 400
+
 
 if __name__ == '__main__':
      app.run(host='::', port=5000, debug=True)

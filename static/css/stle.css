@@ -1,0 +1,216 @@
+/* General Styles */
+body {
+    background-color: #f3f2ef;
+    color: rgba(0, 0, 0, 0.9);
+    font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Fira Sans", Ubuntu, Oxygen, "Oxygen Sans", Cantarell, "Droid Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Lucida Grande", Helvetica, Arial, sans-serif;
+}
+
+/* Header */
+header {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+header .h3 {
+    color: #0a66c2;
+    font-weight: 600;
+}
+
+/* Cards */
+.card {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+    transition: box-shadow 0.3s ease;
+    margin-bottom: 20px;
+}
+
+.card:hover {
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+
+.card-body {
+    padding: 24px;
+}
+
+/* Profile Section */
+.profile-background {
+    height: 120px;
+    background-color: #1b406b;
+    margin: -24px -24px 0 -24px;
+    border-radius: 8px 8px 0 0;
+}
+
+.profile-photo {
+    width: 152px;
+    height: 152px;
+    margin-top: -76px;
+    border: 4px solid #fff;
+    background-color: #fff;
+}
+
+/* Section Headers */
+.h5 {
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.9);
+}
+
+/* Experience Items */
+.experience-item, .education-item, .project-item, .certification-item, .award-item {
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.experience-item:last-child, .education-item:last-child, 
+.project-item:last-child, .certification-item:last-child, 
+.award-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+/* Skills */
+.badge {
+    padding: 10px 20px;    /* Slightly larger padding */
+    font-weight: 500;
+    font-size: 14px;
+    border-radius: 25px;   /* Increased for bigger round corners */
+    background-color: #f3f2ef;  /* Light background */
+    color: #333;           /* Dark text for better visibility */
+    margin: 6px;
+    display: inline-block;
+    border: 1px solid #e0e0e0;
+}
+
+/* Additional styling for skill badges */
+.skill-badge {
+    padding: 10px 20px;
+    font-weight: 500;
+    font-size: 14px;
+    border-radius: 25px;    /* Matching the badge class */
+    background-color: #f3f2ef;
+    color: #333;
+    margin: 6px;
+    border: 1px solid #e0e0e0;
+    display: inline-block;
+}
+
+.badge:hover, .skill-badge:hover {
+    background-color: #e9ecef;
+    transition: background-color 0.2s ease;
+}
+
+#skillsSection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;   /* Slightly increased gap */
+    padding: 10px 0;
+}
+
+
+
+/* Progress Bar */
+.progress {
+    height: 8px;
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, 0.08);
+}
+
+.progress-bar {
+    background-color: #0a66c2;
+}
+
+/* Buttons */
+.btn-primary {
+    background-color: #0a66c2;
+    border-color: #0a66c2;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 16px;
+}
+
+.btn-primary:hover {
+    background-color: #004182;
+    border-color: #004182;
+}
+
+.btn-outline-primary {
+    color: #0a66c2;
+    border-color: #0a66c2;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 16px;
+}
+
+.btn-outline-primary:hover {
+    background-color: rgba(10, 102, 194, 0.1);
+    color: #0a66c2;
+    border-color: #0a66c2;
+}
+
+/* File Upload */
+.form-control {
+    border-radius: 4px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    padding: 8px 12px;
+}
+
+.form-control:focus {
+    border-color: #0a66c2;
+    box-shadow: 0 0 0 1px #0a66c2;
+}
+
+/* Loading Animation */
+.loading {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.loading .spinner-border {
+    width: 24px;
+    height: 24px;
+    color: #0a66c2;
+}
+
+/* Placeholder Content */
+.placeholder-content {
+    color: rgba(0, 0, 0, 0.6);
+    font-style: italic;
+    padding: 12px 0;
+}
+
+/* Recommendations */
+.recommendation-item {
+    padding: 16px;
+    background-color: rgba(0, 0, 0, 0.02);
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+.recommendation-item:last-child {
+    margin-bottom: 0;
+}
+
+.recommendation-item img {
+    width: 48px;
+    height: 48px;
+}
+
+/* Media Queries */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 16px;
+    }
+
+    .profile-photo {
+        width: 120px;
+        height: 120px;
+        margin-top: -60px;
+    }
+
+    .profile-background {
+        height: 96px;
+    }
+
+    header .h3 {
+        font-size: 1.25rem;
+    }
+}
