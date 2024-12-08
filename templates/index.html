@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Linkedin Job Assistant</title>
+    <title>LinkedIn Job Assistant</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/stle.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         .loader {
-            border: 4px solid #f3f3f3;
+            border: 4px solid rgba(107, 70, 193, 0.1);
             border-radius: 50%;
-            border-top: 4px solid #3498db;
+            border-top: 4px solid var(--primary);
             width: 40px;
             height: 40px;
             animation: spin 1s linear infinite;
@@ -25,12 +26,12 @@
     <nav class="bg-white shadow-lg">
         <div class="container mx-auto px-4">
             <div class="flex justify-between items-center py-4">
-                <a href="/" class="text-xl font-bold text-blue-600">Linkedin Job Assistant</a>
+                <a href="/" class="text-xl font-bold text-primary">LinkedIn Job Assistant</a>
                 <div class="flex items-center gap-6">
                     <nav class="flex items-center gap-6">
                         <a href="/upload" class="active">Resume Analysis</a>
                         <a href="/jobs">Latest Jobs</a>
-                        <a href="/linkedInProfileAssistant">LinkedIn Profile Assistant</a>
+                        <a href="/linkedInProfileAssistant">Profile Assistant</a>
                     </nav>
                 </div>
             </div>
@@ -39,17 +40,22 @@
 
     <div class="container mx-auto px-4 py-8">
         {% if not user %}
-            <div class="text-center py-8">
-                <h1 class="text-3xl font-bold text-gray-800 mb-4">Welcome to LinkedIn Job Assistant</h1>
-                <p class="text-gray-600 mb-8">Please login to access job listings and resume analysis features.</p>
-                <a href="/login" class="bg-blue-500 text-white px-6 py-3 rounded-lg hover:bg-blue-600 inline-block">
-                    Login to Continue
-                </a>
+            <div class="text-center py-12">
+                <div class="max-w-2xl mx-auto bg-white rounded-lg shadow-lg p-8">
+                    <i class="fas fa-user-circle text-6xl text-primary mb-6"></i>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-4">Welcome to LinkedIn Job Assistant</h1>
+                    <p class="text-gray-600 mb-8 text-lg">Your intelligent career companion for job search and resume optimization.</p>
+                    <a href="/login" class="btn-primary inline-flex items-center gap-2">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Login to Continue
+                    </a>
+                </div>
             </div>
         {% else %}
             <div class="flex justify-between items-center mb-8">
-                <h1 class="text-3xl font-bold text-gray-800">Latest LinkedIn Jobs</h1>
-                <button onclick="refreshJobs()" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600">
+                <h1 class="text-3xl font-bold text-gray-800">Latest Jobs</h1>
+                <button onclick="refreshJobs()" class="btn-primary flex items-center gap-2">
+                    <i class="fas fa-sync-alt"></i>
                     Refresh Jobs
                 </button>
             </div>
@@ -62,16 +68,25 @@
                 <!-- Jobs will be dynamically inserted here -->
             </div>
 
-            <div id="noJobs" class="hidden text-center py-8">
-                <p class="text-gray-600 text-lg">No jobs available at the moment. Please try again later.</p>
+            <div id="noJobs" class="hidden">
+                <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+                    <i class="fas fa-briefcase text-5xl text-gray-400 mb-4"></i>
+                    <p class="text-gray-600 text-lg mb-4">No jobs available at the moment.</p>
+                    <p class="text-gray-500">Check back later for new opportunities!</p>
+                </div>
             </div>
 
             <!-- Resume Analysis CTA -->
-            <div class="mt-12 text-center">
-                <h2 class="text-2xl font-bold text-gray-800 mb-4">Want to check if your resume matches these jobs?</h2>
-                <a href="/upload" class="inline-block bg-blue-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    Analyze Your Resume
-                </a>
+            <div class="mt-12">
+                <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+                    <i class="fas fa-file-alt text-5xl text-primary mb-4"></i>
+                    <h2 class="text-2xl font-bold text-gray-800 mb-4">Want to check if your resume matches these jobs?</h2>
+                    <p class="text-gray-600 mb-6">Upload your resume and get instant feedback on how well it matches job requirements.</p>
+                    <a href="/upload" class="btn-primary inline-flex items-center gap-2">
+                        <i class="fas fa-upload"></i>
+                        Analyze Your Resume
+                    </a>
+                </div>
             </div>
         {% endif %}
     </div>
@@ -93,14 +108,20 @@
 
         function createJobCard(job) {
             return `
-                <div class="bg-white rounded-lg shadow-lg p-6 hover:shadow-xl transition-shadow">
-                    <h2 class="text-xl font-bold text-gray-800 mb-2">${job.title}</h2>
-                    <p class="text-gray-600 mb-4">${job.companyName}</p>
+                <div class="job-card p-6">
+                    <h2 class="job-title">${job.title}</h2>
+                    <p class="company-name">
+                        <i class="fas fa-building mr-2"></i>
+                        ${job.companyName}
+                    </p>
                     <div class="flex justify-between items-center text-sm text-gray-500 mb-4">
-                        <span>${formatTimeAgo(job.listedAt)}</span>
+                        <span>
+                            <i class="fas fa-clock mr-1"></i>
+                            ${formatTimeAgo(job.listedAt)}
+                        </span>
                     </div>
-                    <a href="${job.jobPostingUrl}" target="_blank" 
-                       class="block w-full text-center bg-blue-500 text-white py-2 rounded-lg hover:bg-blue-600 transition-colors">
+                    <a href="${job.jobPostingUrl}" target="_blank" class="view-job-btn w-full text-center">
+                        <i class="fas fa-external-link-alt mr-2"></i>
                         View Job
                     </a>
                 </div>
