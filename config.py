@@ -33,6 +33,7 @@ class Config:
     COGNITO_DOMAIN = os.getenv('COGNITO_DOMAIN')  # The UI domain
     COGNITO_AUTHORITY = f"https://cognito-idp.{os.getenv('AWS_REGION')}.amazonaws.com/{os.getenv('COGNITO_USER_POOL_ID')}"  # The authority URL
     COGNITO_REDIRECT_URL = os.getenv('COGNITO_REDIRECT_URL')
+    COGNITO_LOGOUT_URL =  os.getenv('COGNITO_LOGOUT_URL')
     COGNITO_SCOPES = ['email', 'openid', 'phone']
 
     # AWS SQS Configuration

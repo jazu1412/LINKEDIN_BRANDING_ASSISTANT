@@ -329,7 +329,7 @@ def logout():
     cognito_logout_url = (
         f"{Config.COGNITO_DOMAIN}/logout?"
         f"client_id={Config.COGNITO_CLIENT_ID}&"
-        f"logout_uri={Config.COGNITO_REDIRECT_URL}"
+        f"logout_uri={Config.COGNITO_LOGOUT_URL}"
     )
     return redirect(cognito_logout_url)
 
