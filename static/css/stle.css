@@ -15,6 +15,38 @@ header .h3 {
     font-weight: 600;
 }
 
+/* Navigation Links */
+nav a {
+    color: #0a66c2 !important;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    padding: 8px 16px;
+    border-radius: 24px;
+    font-weight: 600;
+    font-size: 14px;
+    display: inline-block;
+    border: 2px solid transparent;
+}
+
+nav a:hover {
+    background-color: rgba(10, 102, 194, 0.1);
+    color: #004182 !important;
+    border-color: #0a66c2;
+}
+
+/* Active navigation state */
+nav a.active {
+    background-color: #0a66c2;
+    color: white !important;
+    border-color: #0a66c2;
+}
+
+nav a.active:hover {
+    background-color: #004182;
+    color: white !important;
+    border-color: #004182;
+}
+
 /* Cards */
 .card {
     border: none;
@@ -104,8 +136,6 @@ header .h3 {
     gap: 10px;   /* Slightly increased gap */
     padding: 10px 0;
 }
-
-
 
 /* Progress Bar */
 .progress {
@@ -212,5 +242,10 @@ header .h3 {
 
     header .h3 {
         font-size: 1.25rem;
+    }
+
+    nav a {
+        padding: 6px 12px;
+        font-size: 13px;
     }
 }
