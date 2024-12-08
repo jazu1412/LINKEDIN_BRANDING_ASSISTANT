@@ -18,6 +18,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import openai
 from werkzeug.utils import secure_filename
 import PyPDF2
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -364,8 +365,19 @@ def get_jobs():
         if cached_jobs:
             logger.info(f"Retrieved jobs from Redis cache with key: {redis_key}")
             return jsonify(json.loads(cached_jobs))
-      
+        
         logger.info("No cached jobs found in Redis, fetching from SQS")
+     
+        api_endpoint = "https://bfgw1302eb.execute-api.us-east-1.amazonaws.com/default/JobSearchAndSendToSQS"
+        
+        try:
+            response = requests.get(api_endpoint)
+            if response.status_code == 200:
+                logger.info("Successfully triggered the Lambda to send jobs to SQS")
+            else:
+                logger.error(f"Failed to trigger the Lambda. Status code: {response.status_code}, Response: {response.text}")
+        except Exception as e:
+            logger.error(f"Error while calling the API Gateway endpoint: {str(e)}")
 
         reader = SQSJobReader()
         jobs = reader.read_jobs(max_messages=10)
