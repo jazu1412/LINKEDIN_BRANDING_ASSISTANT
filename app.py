@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import google.generativeai as genai
 import os
+
 import PyPDF2 as pdf
 from flask_pymongo import PyMongo
 from bson import ObjectId
@@ -691,7 +692,7 @@ def upload_resume_for_linkedIn_profile():
             # Clean up the uploaded file
             os.remove(filepath)
             
-            # Add default profile picture URL
+            # Add default profile picture URL here
             profile_data['profile_picture'] = "https://via.placeholder.com/150"
             
             # Calculate profile strength based on section completeness
