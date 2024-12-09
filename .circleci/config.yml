@@ -1,0 +1,47 @@
+version: 2.1
+
+jobs:
+  build-and-push:
+    docker:
+      - image: cimg/python:3.9
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.14
+          docker_layer_caching: true
+      
+      # Generate a unique tag using timestamp and short git SHA
+      - run:
+          name: Generate Docker Tag
+          command: |
+            echo "export DOCKER_TAG=$(date +%Y%m%d_%H%M%S)_${CIRCLE_SHA1:0:7}" >> $BASH_ENV
+            source $BASH_ENV
+            echo "Generated tag: $DOCKER_TAG"
+      
+      # Build the Docker image with the unique tag
+      - run:
+          name: Build Docker Image
+          command: |
+            docker build -t $DOCKER_USERNAME/linkedin-branding-assistant:$DOCKER_TAG .
+      
+      # Login to DockerHub
+      - run:
+          name: Login to DockerHub
+          command: |
+            echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+      
+      # Push the image with unique tag
+      - run:
+          name: Push Docker Image
+          command: |
+            docker push $DOCKER_USERNAME/linkedin-branding-assistant:$DOCKER_TAG
+
+workflows:
+  version: 2
+  build-deploy:
+    jobs:
+      - build-and-push:
+          context: docker-hub-creds
+          filters:
+            branches:
+              only: main
