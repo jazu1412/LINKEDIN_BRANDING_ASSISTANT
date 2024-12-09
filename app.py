@@ -19,6 +19,8 @@ import openai
 from werkzeug.utils import secure_filename
 import PyPDF2
 import requests
+import certifi
+from analytics import analytics_bp, track_login, track_resume_analysis, track_linkedin_analysis, track_feature_usage
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,8 +29,16 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)
 
+# Register the blueprint
+app.register_blueprint(analytics_bp)  
+
+
+# Register analytics blueprint
+app.register_blueprint(analytics_bp, url_prefix='/analytics')
+
 app.secret_key = os.urandom(24)  # Use a secure random key in production
-app.config['MONGO_URI'] = Config.MONGO_URI
+# app.config['MONGO_URI'] = Config.MONGO_URI
+app.config['MONGO_URI'] = f"{Config.MONGO_URI}&tlsCAFile={certifi.where()}"
 mongo = PyMongo(app)
 oauth = OAuth(app)
 
@@ -294,8 +304,8 @@ def allowed_file(filename):
 def index():
     user = session.get('user')
     if user:
-        return render_template('index.html', user=user)
-    return render_template('index.html')
+        track_feature_usage(user.get('sub'), 'home_page')
+    return render_template('index.html', user=user)
 
 @app.route('/login')
 def login():
@@ -313,6 +323,7 @@ def auth_callback():
         
         if user_info:
             session['user'] = user_info
+            track_login(user_info.get('sub'))
             logger.info(f"User successfully authenticated: {user_info.get('email')}")
             return redirect(url_for('index'))
         else:
@@ -337,21 +348,29 @@ def logout():
 @app.route('/upload')
 @login_required
 def upload():
+    user = session.get('user')
+    track_feature_usage(user.get('sub'), 'upload_page')
     return render_template('upload.html')
 
 @app.route('/jobs')
 @login_required
 def jobs_page():
+    user = session.get('user')
+    track_feature_usage(user.get('sub'), 'jobs_page')
     return render_template('jobs.html')
 
 @app.route('/analyze-form/<resume_id>')
 @login_required
 def analyze_form(resume_id):
+    user = session.get('user')
+    track_feature_usage(user.get('sub'), 'analyze_form')
     return render_template('analyze.html', resume_id=resume_id)
 
 @app.route('/linkedInProfileAssistant')
 @login_required
 def linkedInProfileAssistant():
+    user = session.get('user')
+    track_feature_usage(user.get('sub'), 'linkedin_assistant')
     return render_template('linkedInProfileAssistant.html')
 
 @app.route('/api/jobs')
@@ -414,6 +433,9 @@ def upload_resume():
         r.set(f"resume:{resume_id}", resume_text)
         logger.info(f"Stored resume {resume_id} in Redis cache")
         
+        user = session.get('user')
+        track_feature_usage(user.get('sub'), 'resume_upload')
+        
         return jsonify({
             'resume_id': resume_id,
             'message': 'Resume uploaded successfully'
@@ -455,6 +477,10 @@ def analyze_job():
         
         analysis = get_gemini_response(resume_text, job_description)
         
+        user = session.get('user')
+        track_resume_analysis(user.get('sub'))
+        track_feature_usage(user.get('sub'), 'resume_analysis')
+        
         return jsonify(analysis)
         
     except Exception as e:
@@ -493,6 +519,9 @@ def tailor_resume_endpoint():
             resume_text = resume_text.decode('utf-8')
         
         result = tailor_resume_points(resume_text, job_description, keywords)
+        
+        user = session.get('user')
+        track_feature_usage(user.get('sub'), 'resume_tailoring')
         
         return jsonify(result)
         
@@ -691,10 +720,10 @@ def upload_resume_for_linkedIn_profile():
             # Clean up the uploaded file
             os.remove(filepath)
             
-            # Add default profile picture URL
+           
             profile_data['profile_picture'] = "https://via.placeholder.com/150"
             
-            # Calculate profile strength based on section completeness
+           
             sections = ['about', 'experience', 'education', 'projects', 'certifications', 'skills', 'awards', 'recommendations']
             section_weights = {
                 'about': 15,
@@ -713,15 +742,19 @@ def upload_resume_for_linkedIn_profile():
                     if isinstance(profile_data[section], list):
                         if len(profile_data[section]) > 0:
                             total_weight += weight
-                    elif profile_data[section]:  # For non-list sections like 'about'
+                    elif profile_data[section]:  
                         total_weight += weight
             
             profile_data['profile_strength'] = total_weight
             
+            user = session.get('user')
+            if user:
+                track_linkedin_analysis(user.get('sub'))
+                track_feature_usage(user.get('sub'), 'linkedin_profile_generation')
+            
             return jsonify(profile_data)
             
         except Exception as e:
-            # Clean up file if it exists
             if os.path.exists(filepath):
                 os.remove(filepath)
             return jsonify({'error': str(e)}), 500

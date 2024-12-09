@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #6366f1;
+            --success-color: #22c55e;
+            --warning-color: #eab308;
+            --danger-color: #ef4444;
+            --background-color: #f9fafb;
+            --card-background: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+            margin: 0;
+            padding: 24px;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .dashboard-header {
+            margin-bottom: 32px;
+        }
+
+        .dashboard-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background: var(--card-background);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .metric-title {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            font-weight: 500;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .chart-container {
+            background: var(--card-background);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .chart-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .refresh-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+
+        .refresh-button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .last-updated {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <div class="dashboard-header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h1>Analytics Dashboard</h1>
+                <button onclick="fetchData()" class="refresh-button">Refresh Data</button>
+            </div>
+            <div class="last-updated" id="lastUpdated"></div>
+        </div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-title">Total Users</div>
+                <div class="metric-value" id="total-users">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Total Logins</div>
+                <div class="metric-value" id="total-logins">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">Resume Analysis Count</div>
+                <div class="metric-value" id="resume-analysis-count">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-title">LinkedIn Analysis Count</div>
+                <div class="metric-value" id="linkedin-analysis-count">-</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">Daily Activity</div>
+                </div>
+                <canvas id="daily-metrics-chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div class="chart-title">Feature Usage Distribution</div>
+                </div>
+                <canvas id="feature-usage-chart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-header">
+                <div class="chart-title">Feature Usage Over Time</div>
+            </div>
+            <canvas id="feature-usage-timeline-chart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let charts = {
+            dailyMetrics: null,
+            featureUsage: null,
+            featureTimeline: null
+        };
+
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = 
+                `Last updated: ${now.toLocaleString()}`;
+        }
+
+        function destroyCharts() {
+            Object.values(charts).forEach(chart => {
+                if (chart) {
+                    chart.destroy();
+                }
+            });
+        }
+
+        async function fetchData() {
+            try {
+                const response = await fetch('/analytics/api/metrics');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+
+                // Update metric cards with animation
+                document.getElementById('total-users').textContent = formatNumber(data.total_users);
+                document.getElementById('total-logins').textContent = formatNumber(data.total_logins);
+                document.getElementById('resume-analysis-count').textContent = formatNumber(data.resume_analysis_count);
+                document.getElementById('linkedin-analysis-count').textContent = formatNumber(data.linkedin_analysis_count);
+
+                // Destroy existing charts
+                destroyCharts();
+
+                // Create daily metrics chart
+                const dates = [...new Set([
+                    ...data.daily_metrics.logins.map(d => d.date),
+                    ...data.daily_metrics.resume_analysis.map(d => d.date),
+                    ...data.daily_metrics.linkedin_analysis.map(d => d.date)
+                ])].sort();
+
+                charts.dailyMetrics = new Chart(document.getElementById('daily-metrics-chart'), {
+                    type: 'line',
+                    data: {
+                        labels: dates,
+                        datasets: [
+                            {
+                                label: 'Logins',
+                                data: dates.map(date => {
+                                    const entry = data.daily_metrics.logins.find(d => d.date === date);
+                                    return entry ? entry.count : 0;
+                                }),
+                                borderColor: 'rgb(75, 192, 192)',
+                                tension: 0.1
+                            },
+                            {
+                                label: 'Resume Analysis',
+                                data: dates.map(date => {
+                                    const entry = data.daily_metrics.resume_analysis.find(d => d.date === date);
+                                    return entry ? entry.count : 0;
+                                }),
+                                borderColor: 'rgb(255, 99, 132)',
+                                tension: 0.1
+                            },
+                            {
+                                label: 'LinkedIn Analysis',
+                                data: dates.map(date => {
+                                    const entry = data.daily_metrics.linkedin_analysis.find(d => d.date === date);
+                                    return entry ? entry.count : 0;
+                                }),
+                                borderColor: 'rgb(54, 162, 235)',
+                                tension: 0.1
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Daily Activity'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Create feature usage chart
+                charts.featureUsage = new Chart(document.getElementById('feature-usage-chart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: data.feature_usage.map(f => f.feature_name),
+                        datasets: [{
+                            data: data.feature_usage.map(f => f.usage_count),
+                            backgroundColor: [
+                                'rgb(75, 192, 192)',
+                                'rgb(255, 99, 132)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 206, 86)',
+                                'rgb(153, 102, 255)',
+                                'rgb(255, 159, 64)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'right'
+                            }
+                        }
+                    }
+                });
+
+                // Create feature usage timeline chart
+                const featureDates = [...new Set(data.daily_metrics.feature_usage.map(d => d.date))].sort();
+                const features = [...new Set(data.daily_metrics.feature_usage.map(d => d.feature_name))];
+
+                charts.featureTimeline = new Chart(document.getElementById('feature-usage-timeline-chart'), {
+                    type: 'line',
+                    data: {
+                        labels: featureDates,
+                        datasets: features.map((feature, index) => ({
+                            label: feature,
+                            data: featureDates.map(date => {
+                                const entry = data.daily_metrics.feature_usage.find(
+                                    d => d.date === date && d.feature_name === feature
+                                );
+                                return entry ? entry.count : 0;
+                            }),
+                            borderColor: [
+                                'rgb(75, 192, 192)',
+                                'rgb(255, 99, 132)',
+                                'rgb(54, 162, 235)',
+                                'rgb(255, 206, 86)',
+                                'rgb(153, 102, 255)',
+                                'rgb(255, 159, 64)'
+                            ][index % 6],
+                            tension: 0.1
+                        }))
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Feature Usage Over Time'
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            }
+                        }
+                    }
+                });
+
+                updateLastUpdated();
+            } catch (error) {
+                console.error('Error fetching metrics:', error);
+            }
+        }
+
+        // Initial data fetch
+        fetchData();
+
+        // Refresh data every 30 seconds
+        setInterval(fetchData, 30000);
+    </script>
+</body>
+</html>
